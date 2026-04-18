@@ -81,6 +81,24 @@ When a client connects to an ongoing game, it may be missing actions. It request
 
 `getInitialProps` in each page calls the server API, populates Redux state server-side, then serializes it into `__NEXT_DATA__` for client hydration. Auth is cookie-based, read in `addCurUserToState`.
 
+## CI/CD — Azure DevOps Pipeline
+
+This project has an Azure DevOps pipeline connected to the GitHub repo. Key notes:
+
+- Use `yarn`, not `npm` — the lockfile is `yarn.lock` and the `test` script calls `yarn` internally.
+- **Node.js 17+ requires `NODE_OPTIONS=--openssl-legacy-provider`** on the build step. Next.js 7 uses webpack 4 which relies on MD4 hashing dropped in OpenSSL 3. Without this flag, `yarn build` will fail with `ERR_OSSL_EVP_UNSUPPORTED`.
+
+Working pipeline snippet:
+
+```yaml
+- script: |
+    yarn install
+    yarn build
+  displayName: 'yarn install and build'
+  env:
+    NODE_OPTIONS: --openssl-legacy-provider
+```
+
 ## Type System
 
 Flow is used throughout — not TypeScript. Run `yarn test` to include Flow checking. The types in `shared/types/` are the source of truth for data shapes. When adding new actions or state fields, update the Flow types there first.
