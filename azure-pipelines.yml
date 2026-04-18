@@ -23,3 +23,5 @@
       yarn install
       yarn build
     displayName: 'yarn install and build'
+    env:
+      NODE_OPTIONS: --openssl-legacy-provider
