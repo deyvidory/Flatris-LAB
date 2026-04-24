@@ -50,7 +50,7 @@ stages:
           [
             {
               "name": "SCM_DO_BUILD_DURING_DEPLOYMENT",
-              "value": "true"
+              "value": "false"
             },
             {
               "name": "NODE_OPTIONS",
@@ -58,17 +58,10 @@ stages:
             }
           ]
 
-    - script: rm -rf node_modules
-      displayName: 'Remove node_modules before archiving'
-
-    - task: ArchiveFiles@2
-      displayName: 'Archive files'
-      inputs:
-        rootFolderOrFile: '$(System.DefaultWorkingDirectory)'
-        includeRootFolder: false
-        archiveType: zip
-        archiveFile: $(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip
-        replaceExistingArchive: true
+    - script: |
+        cd $(System.DefaultWorkingDirectory)
+        zip -ry $(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip . --exclude "*.git*"
+      displayName: 'Archive files (preserving symlinks)'
 
     - publish: $(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip
       artifact: drop
