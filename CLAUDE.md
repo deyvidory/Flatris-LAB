@@ -87,16 +87,33 @@ This project has an Azure DevOps pipeline connected to the GitHub repo. Key note
 
 - Use `yarn`, not `npm` — the lockfile is `yarn.lock` and the `test` script calls `yarn` internally.
 - **Node.js 17+ requires `NODE_OPTIONS=--openssl-legacy-provider`** on the build step. Next.js 7 uses webpack 4 which relies on MD4 hashing dropped in OpenSSL 3. Without this flag, `yarn build` will fail with `ERR_OSSL_EVP_UNSUPPORTED`.
+- **Build locally in the pipeline** — do not rely on Kudu remote builds (`SCM_DO_BUILD_DURING_DEPLOYMENT: false`). Kudu defaults to `npm` and has no `NODE_OPTIONS`, so the build will fail.
+- **Runtime stack must match the build agent** — use `NODE|18-lts` (not `NODE|10.14`, which is EOL and unsupported by Azure).
+
+### Deprecated pipeline syntax to avoid
+
+| Deprecated | Use instead | Notes |
+|---|---|---|
+| `task: NodeTool@0` | `task: UseNode@1` | `NodeTool` is deprecated; `UseNode` is the current task; input key is `version` not `versionSpec` |
+| `upload:` shorthand | `publish:` shorthand | `upload` keyword is deprecated in Azure Pipelines YAML |
 
 Working pipeline snippet:
 
 ```yaml
+- task: UseNode@1
+  inputs:
+    version: '18.x'
+  displayName: 'Install Node.js'
+
 - script: |
     yarn install
     yarn build
   displayName: 'yarn install and build'
   env:
     NODE_OPTIONS: --openssl-legacy-provider
+
+- publish: $(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip
+  artifact: drop
 ```
 
 ## Type System

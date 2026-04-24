@@ -1,34 +1,46 @@
 trigger:
 - master
- 
+
 pr: none
 
 variables:
- 
+
   # Azure Resource Manager connection created during pipeline creation
   azureSubscription: 'ci_cd_monster'
-  
+
   # Web app name
   webAppName: 'ci-cd-monster'
-  
+
   # Resource group
   resourceGroupName: 'Deyvid-test'
- 
+
   # Environment name
   environmentName: 'ci-cd-monster'
- 
+
   # Agent VM image name
   vmImageName: 'ubuntu-latest'
-  
+
 stages:
-- stage: Archive
-  displayName: Archive stage
-  jobs:  
-  - job: Archive
-    displayName: Archive
+- stage: Build
+  displayName: Build stage
+  jobs:
+  - job: Build
+    displayName: Build
     pool:
       vmImage: $(vmImageName)
-    steps:   
+    steps:
+    - task: UseNode@1
+      inputs:
+        version: '18.x'
+      displayName: 'Install Node.js'
+
+    - script: |
+        yarn install
+        yarn build
+      displayName: 'yarn install and build'
+      env:
+        NODE_OPTIONS: --openssl-legacy-provider
+
     - task: AzureAppServiceSettings@1
       inputs:
         azureSubscription: $(azureSubscription)
@@ -38,9 +50,10 @@ stages:
           [
             {
               "name": "SCM_DO_BUILD_DURING_DEPLOYMENT",
-              "value": "true"
+              "value": "false"
             }
           ]
+
     - task: ArchiveFiles@2
       displayName: 'Archive files'
       inputs:
@@ -49,30 +62,30 @@ stages:
         archiveType: zip
         archiveFile: $(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip
         replaceExistingArchive: true
- 
-    - upload: $(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip
+
+    - publish: $(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip
       artifact: drop
- 
+
 - stage: Deploy
   displayName: Deploy stage
-  dependsOn: Archive
+  dependsOn: Build
   condition: succeeded()
   jobs:
   - deployment: Deploy
     displayName: Deploy
     environment: $(environmentName)
-    pool: 
+    pool:
       vmImage: $(vmImageName)
     strategy:
       runOnce:
         deploy:
-          steps:            
+          steps:
           - task: AzureWebApp@1
             displayName: 'Azure Web App Deploy: Matt-Test-NodeJS-Deploy'
             inputs:
               azureSubscription: $(azureSubscription)
               appType: webAppLinux
               appName: $(webAppName)
-              runtimeStack: 'NODE|10.14'
+              runtimeStack: 'NODE|18-lts'
               package: $(Pipeline.Workspace)/drop/$(Build.BuildId).zip
  
