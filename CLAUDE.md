@@ -87,8 +87,11 @@ This project has an Azure DevOps pipeline connected to the GitHub repo. Key note
 
 - Use `yarn`, not `npm` — the lockfile is `yarn.lock` and the `test` script calls `yarn` internally.
 - **Node.js 17+ requires `NODE_OPTIONS=--openssl-legacy-provider`** on the build step. Next.js 7 uses webpack 4 which relies on MD4 hashing dropped in OpenSSL 3. Without this flag, `yarn build` will fail with `ERR_OSSL_EVP_UNSUPPORTED`.
-- **Build locally in the pipeline** — do not rely on Kudu remote builds (`SCM_DO_BUILD_DURING_DEPLOYMENT: false`). Kudu defaults to `npm` and has no `NODE_OPTIONS`, so the build will fail.
+- **Build locally in the pipeline, disable remote build** — set `SCM_DO_BUILD_DURING_DEPLOYMENT: false`. Kudu remote builds fail because: (1) defaults to `npm` not `yarn`, (2) has no `NODE_OPTIONS`, (3) App Service outbound network can timeout on package downloads (`ESOCKETTIMEDOUT`).
 - **Runtime stack must match the build agent** — use `NODE|18-lts` (not `NODE|10.14`, which is EOL and unsupported by Azure).
+- **Ship `node_modules` in the zip, but preserve symlinks** — use `zip -ry` instead of `ArchiveFiles@2`. The built-in task dereferences symlinks, which breaks `node_modules/.bin/babel-node` (its relative path `../lib/babel-node` stops resolving). The `-y` flag stores symlinks as symlinks.
+- **`NODE_OPTIONS` must be set as an App Service app setting** — not just as a pipeline env var. `babel-node` (used by `yarn start`) needs it at runtime too.
+- **`@babel/node` is a devDependency** — if doing a remote build, Kudu's production-only install will skip it and `yarn start` will fail with `Cannot find module '../lib/babel-node'`.
 
 ### Deprecated pipeline syntax to avoid
 
@@ -111,6 +114,22 @@ Working pipeline snippet:
   displayName: 'yarn install and build'
   env:
     NODE_OPTIONS: --openssl-legacy-provider
+
+- task: AzureAppServiceSettings@1
+  inputs:
+    azureSubscription: $(azureSubscription)
+    appName: $(webAppName)
+    resourceGroupName: $(resourceGroupName)
+    appSettings: |
+      [
+        { "name": "SCM_DO_BUILD_DURING_DEPLOYMENT", "value": "false" },
+        { "name": "NODE_OPTIONS", "value": "--openssl-legacy-provider" }
+      ]
+
+- script: |
+    cd $(System.DefaultWorkingDirectory)
+    zip -ry $(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip . --exclude "*.git*"
+  displayName: 'Archive files (preserving symlinks)'
 
 - publish: $(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip
   artifact: drop
