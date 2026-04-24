@@ -50,9 +50,16 @@ stages:
           [
             {
               "name": "SCM_DO_BUILD_DURING_DEPLOYMENT",
-              "value": "false"
+              "value": "true"
+            },
+            {
+              "name": "NODE_OPTIONS",
+              "value": "--openssl-legacy-provider"
             }
           ]
+
+    - script: rm -rf node_modules
+      displayName: 'Remove node_modules before archiving'
 
     - task: ArchiveFiles@2
       displayName: 'Archive files'
