@@ -21,8 +21,33 @@ variables:
   vmImageName: 'ubuntu-latest'
 
 stages:
+- stage: Test
+  displayName: Test stage
+  jobs:
+  - job: Test
+    displayName: Test
+    pool:
+      vmImage: $(vmImageName)
+    steps:
+    - task: UseNode@1
+      inputs:
+        version: '18.x'
+      displayName: 'Install Node.js'
+
+    - script: yarn install
+      displayName: 'yarn install'
+      env:
+        NODE_OPTIONS: --openssl-legacy-provider
+
+    - script: yarn test
+      displayName: 'Flow + Lint + Jest'
+      env:
+        NODE_OPTIONS: --openssl-legacy-provider
+
 - stage: Build
   displayName: Build stage
+  dependsOn: Test
+  condition: succeeded()
   jobs:
   - job: Build
     displayName: Build
