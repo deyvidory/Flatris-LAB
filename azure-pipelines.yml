@@ -111,7 +111,3 @@ stages:
               imageToDeploy: '$(dockerHubNamespace)/$(imageName):$(Build.BuildId)'
               targetPort: '3000'
               ingress: 'external'
-              environmentVariables: >
-                NODE_ENV=production
-                NODE_OPTIONS=--openssl-legacy-provider
-                PORT=3000
