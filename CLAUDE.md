@@ -83,57 +83,38 @@ When a client connects to an ongoing game, it may be missing actions. It request
 
 ## CI/CD — Azure DevOps Pipeline
 
-This project has an Azure DevOps pipeline connected to the GitHub repo. Key notes:
+The pipeline has three stages: **Test → Build → Deploy**. Triggered on every push to `master`.
+
+### Stages
+
+**Test** — runs `yarn test` (Flow + ESLint + Jest) as a gate before anything is built or deployed.
+
+**Build** — builds a Docker image and pushes to Docker Hub (`deyvidory/flatris`) with two tags: the build ID and `latest`.
+
+**Deploy** — deploys to **Azure Container Apps** (consumption plan, free tier) using the `AzureContainerApps@1` task. The container app is named `flatris-env` in resource group `Deyvid-test`.
+
+### Key notes
 
 - Use `yarn`, not `npm` — the lockfile is `yarn.lock` and the `test` script calls `yarn` internally.
-- **Node.js 17+ requires `NODE_OPTIONS=--openssl-legacy-provider`** on the build step. Next.js 7 uses webpack 4 which relies on MD4 hashing dropped in OpenSSL 3. Without this flag, `yarn build` will fail with `ERR_OSSL_EVP_UNSUPPORTED`.
-- **Build locally in the pipeline, disable remote build** — set `SCM_DO_BUILD_DURING_DEPLOYMENT: false`. Kudu remote builds fail because: (1) defaults to `npm` not `yarn`, (2) has no `NODE_OPTIONS`, (3) App Service outbound network can timeout on package downloads (`ESOCKETTIMEDOUT`).
-- **Runtime stack must match the build agent** — use `NODE|18-lts` (not `NODE|10.14`, which is EOL and unsupported by Azure).
-- **Ship `node_modules` in the zip, but preserve symlinks** — use `zip -ry` instead of `ArchiveFiles@2`. The built-in task dereferences symlinks, which breaks `node_modules/.bin/babel-node` (its relative path `../lib/babel-node` stops resolving). The `-y` flag stores symlinks as symlinks.
-- **`NODE_OPTIONS` must be set as an App Service app setting** — not just as a pipeline env var. `babel-node` (used by `yarn start`) needs it at runtime too.
-- **`@babel/node` is a devDependency** — if doing a remote build, Kudu's production-only install will skip it and `yarn start` will fail with `Cannot find module '../lib/babel-node'`.
+- **`NODE_OPTIONS=--openssl-legacy-provider`** is set in the Dockerfile via `ENV`. Next.js 7 uses webpack 4 which relies on MD4 hashing dropped in OpenSSL 3. It must be present at both build time (`RUN yarn build`) and runtime (`yarn start` via babel-node).
+- **`@babel/node` is a devDependency but required at runtime** — it transpiles the server code on the fly. The Dockerfile runs `yarn install --frozen-lockfile` (not `--production`) to ensure it is present in the image.
+- **Do not pass `NODE_OPTIONS` via `environmentVariables` in `AzureContainerApps@1`** — the `--` prefix causes Azure CLI to misparse it as a flag. It is already baked into the image via the Dockerfile `ENV` statement.
 
-### Deprecated pipeline syntax to avoid
+### Azure resources
 
-| Deprecated | Use instead | Notes |
-|---|---|---|
-| `task: NodeTool@0` | `task: UseNode@1` | `NodeTool` is deprecated; `UseNode` is the current task; input key is `version` not `versionSpec` |
-| `upload:` shorthand | `publish:` shorthand | `upload` keyword is deprecated in Azure Pipelines YAML |
+| Resource | Value |
+|---|---|
+| Docker Hub image | `deyvidory/flatris` |
+| Container App | `flatris-env` |
+| Container Apps Environment | `managedEnvironment-Deyvidtest-9357` |
+| Resource group | `Deyvid-test` |
+| App URL | `https://flatris-env.blackocean-6b536432.westeurope.azurecontainerapps.io` |
 
-Working pipeline snippet:
+### Required Azure DevOps setup
 
-```yaml
-- task: UseNode@1
-  inputs:
-    version: '18.x'
-  displayName: 'Install Node.js'
-
-- script: |
-    yarn install
-    yarn build
-  displayName: 'yarn install and build'
-  env:
-    NODE_OPTIONS: --openssl-legacy-provider
-
-- task: AzureAppServiceSettings@1
-  inputs:
-    azureSubscription: $(azureSubscription)
-    appName: $(webAppName)
-    resourceGroupName: $(resourceGroupName)
-    appSettings: |
-      [
-        { "name": "SCM_DO_BUILD_DURING_DEPLOYMENT", "value": "false" },
-        { "name": "NODE_OPTIONS", "value": "--openssl-legacy-provider" }
-      ]
-
-- script: |
-    cd $(System.DefaultWorkingDirectory)
-    zip -ry $(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip . --exclude "*.git*"
-  displayName: 'Archive files (preserving symlinks)'
-
-- publish: $(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip
-  artifact: drop
-```
+- Service connection `ci_cd_monster` — Azure Resource Manager, scoped to `Deyvid-test` resource group
+- Service connection `dockerhub_service_connection` — Docker Registry (Docker Hub)
+- Extension installed: **Azure Container Apps Deploy** (Microsoft, free)
 
 ## Type System
 
