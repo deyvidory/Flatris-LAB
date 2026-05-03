@@ -27,7 +27,7 @@ variables:
   imageName: 'flatris'
 
   # Azure Container App name
-  containerAppName: 'flatris-app'
+  containerAppName: 'flatris-env'
 
   # Azure Container Apps Environment name
   containerAppsEnvironment: 'managedEnvironment-Deyvidtest-9357'
