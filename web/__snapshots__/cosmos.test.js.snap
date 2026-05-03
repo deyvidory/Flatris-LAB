@@ -6,7 +6,7 @@ exports[`renders fixtures: web/components/Button/index.fixture.js-feedback form 
   onClick={[Function]}
   type="button"
 >
-  Help make Flatris better - 1
+  Help make Flatris better
 </button>
 `;
 
