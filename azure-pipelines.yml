@@ -5,20 +5,32 @@ pr: none
 
 variables:
 
-  # Azure Resource Manager connection created during pipeline creation
+  # Azure Resource Manager connection
   azureSubscription: 'ci_cd_monster'
-
-  # Web app name
-  webAppName: 'ci-cd-monster'
 
   # Resource group
   resourceGroupName: 'Deyvid-test'
 
-  # Environment name
+  # Azure DevOps deployment environment
   environmentName: 'ci-cd-monster'
 
   # Agent VM image name
   vmImageName: 'ubuntu-latest'
+
+  # Docker Hub service connection name (set up in Project Settings → Service Connections)
+  dockerHubConnection: 'dockerhub_service_connection'
+
+  # Your Docker Hub username
+  dockerHubNamespace: 'deyvidory'
+
+  # Docker image name
+  imageName: 'flatris'
+
+  # Azure Container App name
+  containerAppName: 'flatris-app'
+
+  # Azure Container Apps Environment name
+  containerAppsEnvironment: 'managedEnvironment-Deyvidtest-9357'
 
 stages:
 - stage: Test
@@ -50,46 +62,29 @@ stages:
   condition: succeeded()
   jobs:
   - job: Build
-    displayName: Build
+    displayName: Build Docker Image
     pool:
       vmImage: $(vmImageName)
     steps:
-    - task: UseNode@1
+    - task: Docker@2
+      displayName: 'Build Docker image'
       inputs:
-        version: '18.x'
-      displayName: 'Install Node.js'
+        command: build
+        dockerfile: '$(Build.SourcesDirectory)/Dockerfile'
+        repository: '$(dockerHubNamespace)/$(imageName)'
+        tags: |
+          $(Build.BuildId)
+          latest
 
-    - script: |
-        yarn install
-        yarn build
-      displayName: 'yarn install and build'
-      env:
-        NODE_OPTIONS: --openssl-legacy-provider
-
-    - task: AzureAppServiceSettings@1
+    - task: Docker@2
+      displayName: 'Push to Docker Hub'
       inputs:
-        azureSubscription: $(azureSubscription)
-        appName: $(webAppName)
-        resourceGroupName: $(resourceGroupName)
-        appSettings: |
-          [
-            {
-              "name": "SCM_DO_BUILD_DURING_DEPLOYMENT",
-              "value": "false"
-            },
-            {
-              "name": "NODE_OPTIONS",
-              "value": "--openssl-legacy-provider"
-            }
-          ]
-
-    - script: |
-        cd $(System.DefaultWorkingDirectory)
-        zip -ry $(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip . --exclude "*.git*"
-      displayName: 'Archive files (preserving symlinks)'
-
-    - publish: $(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip
-      artifact: drop
+        command: push
+        containerRegistry: '$(dockerHubConnection)'
+        repository: '$(dockerHubNamespace)/$(imageName)'
+        tags: |
+          $(Build.BuildId)
+          latest
 
 - stage: Deploy
   displayName: Deploy stage
@@ -97,7 +92,7 @@ stages:
   condition: succeeded()
   jobs:
   - deployment: Deploy
-    displayName: Deploy
+    displayName: Deploy to Container Apps
     environment: $(environmentName)
     pool:
       vmImage: $(vmImageName)
@@ -105,12 +100,18 @@ stages:
       runOnce:
         deploy:
           steps:
-          - task: AzureWebApp@1
-            displayName: 'Azure Web App Deploy: Matt-Test-NodeJS-Deploy'
+          - download: none
+          - task: AzureContainerApps@1
+            displayName: 'Deploy to Azure Container Apps'
             inputs:
-              azureSubscription: $(azureSubscription)
-              appType: webAppLinux
-              appName: $(webAppName)
-              runtimeStack: 'NODE|18-lts'
-              package: $(Pipeline.Workspace)/drop/$(Build.BuildId).zip
- 
+              azureSubscription: '$(azureSubscription)'
+              containerAppName: '$(containerAppName)'
+              resourceGroup: '$(resourceGroupName)'
+              containerAppsEnvironment: '$(containerAppsEnvironment)'
+              imageToDeploy: '$(dockerHubNamespace)/$(imageName):$(Build.BuildId)'
+              targetPort: '3000'
+              ingress: 'external'
+              environmentVariables: >
+                NODE_ENV=production
+                NODE_OPTIONS=--openssl-legacy-provider
+                PORT=3000
