@@ -32,6 +32,7 @@ module.exports = {
         'jest.config.js',
         'jest.framework-setup.js',
         'web/next.config.js',
+        'ecosystem.config.js',
         'server/**/*.js'
       ],
       env: {
