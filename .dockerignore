@@ -1,0 +1,16 @@
+node_modules
+.next
+.git
+.gitignore
+.dockerignore
+*.log
+out.log
+err.log
+combined.log
+cosmos-export
+firebase-service-account.json
+README.md
+TODO.md
+multiplayer.md
+flatris.gif
+flatris.png
